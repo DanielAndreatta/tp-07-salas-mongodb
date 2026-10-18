@@ -1,0 +1,47 @@
+<section class="panel-formulario">
+    <p class="etiqueta">
+        <%= typeof seccion !=='undefined' ? seccion : 'Reservas' %>
+    </p>
+    <h1>
+        <%= titulo %>
+    </h1>
+
+    <% if (error) { %>
+        <p class="error" role="alert">
+            <%= error %>
+        </p>
+        <% } %>
+
+            <form action="/reservas" method="post" class="formulario">
+                <label for="estudiante">Nombre del estudiante</label>
+                <input id="estudiante" name="estudiante" value="<%= valores.estudiante ?? '' %>" required>
+
+                <label for="email">Email</label>
+                <input id="email" name="email" type="email" value="<%= valores.email ?? '' %>" required>
+
+                <label for="sala">Sala de estudio</label>
+                <select id="sala" name="sala" required>
+                    <% salasPermitidas.forEach(sala=> { %>
+                        <option value="<%= sala %>" <%=valores.sala===sala ? 'selected' : '' %>><%= sala %>
+                        </option>
+                        <% }) %>
+                </select>
+
+                <label for="fecha">Fecha</label>
+                <input id="fecha" name="fecha" type="date" value="<%= valores.fecha ?? '' %>" required>
+
+                <label for="turno">Turno</label>
+                <select id="turno" name="turno" required>
+                    <% turnosPermitidos.forEach(turno=> { %>
+                        <option value="<%= turno %>" <%=valores.turno===turno ? 'selected' : '' %>><%= turno %>
+                        </option>
+                        <% }) %>
+                </select>
+
+                <label for="personas">Cantidad de personas (1 a 6)</label>
+                <input id="personas" name="personas" type="number" min="1" max="6" value="<%= valores.personas ?? '' %>"
+                    required>
+
+                <button type="submit" class="boton">Confirmar Reserva</button>
+            </form>
+</section>

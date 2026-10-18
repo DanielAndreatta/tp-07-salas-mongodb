@@ -1,0 +1,29 @@
+<header class="cabecera-pagina">
+    <p class="etiqueta">
+        <%= typeof seccion !=='undefined' ? seccion : 'Reservas' %>
+    </p>
+    <h1>
+        <%= titulo %>
+    </h1>
+    <a class="boton" href="/reservas/nueva">Nueva Reserva</a>
+</header>
+
+<% if (reservas.length===0) { %>
+    <p>No hay salas reservadas en este momento.</p>
+    <% } else { %>
+        <section class="grilla" aria-label="Salas reservadas">
+            <% reservas.forEach((reserva)=> { %>
+                <article class="tarjeta">
+                    <p class="etiqueta">
+                        <%= reserva.sala %>
+                    </p>
+                    <h2>
+                        <%= reserva.estudiante %>
+                    </h2>
+                    <p>Fecha: <%= reserva.fecha %> | Turno: <%= reserva.turno %>
+                    </p>
+                    <a class="boton" href="/reservas/<%= reserva.id %>">Ver detalle</a>
+                </article>
+                <% }) %>
+        </section>
+        <% } %>
