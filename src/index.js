@@ -1,4 +1,4 @@
-const { leerConfiguracion } = require("./configuracion");
+const { leerConfiguracion } = require("./config/entorno");
 const { crearServicioReservas } = require("./servicios/reservas");
 const { crearApp } = require("./app");
 
