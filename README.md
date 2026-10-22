@@ -35,26 +35,41 @@ El pipeline de middleware respeta el siguiente orden de ejecución:
 - `POST /reservas` -> 302 (válido) o 400 (inválido)
 - `GET /css/estilos.css` -> 200
 
+**Nota sobre Morgan:**
+Dado que Morgan (`app.use(morgan(...))`) está registrado al principio del pipeline en `app.js`, antes de `express.static` y del middleware 404 final, esta herramienta registra **absolutamente todas las solicitudes**, incluyendo las peticiones exitosas de recursos estáticos (como `/css/estilos.css`) y las solicitudes a rutas inexistentes que terminan en 404.
+
 ## Matriz antes/después
 El comportamiento funcional se mantiene idéntico tras la refactorización:
 
-| Caso | Esperado | Antes (TP05) | Después (TP06) |
-| :--- | :--- | :--- | :--- |
-| **Inicio y CSS** | 200 | Navegación funcional, CSS cargado, ID visible. | Navegación funcional, CSS cargado, ID visible. |
-| **Estado inicial** | 200 | JSON con cantidad (4) e ID dinámico. | JSON con cantidad (4) e ID dinámico. |
-| **Listado y detalle** | 200 | 4 tarjetas iniciales. Detalle muestra datos completos. | 4 tarjetas iniciales. Detalle muestra datos completos. |
-| **Detalle inexistente** | 404 | Vista HTML personalizada 404. | Vista HTML personalizada 404. |
-| **Formulario** | 200 | Carga EJS con selects y campos vacíos. | Carga EJS con selects y campos vacíos. |
-| **POST inválido (vacío/errores)** | 400 | No crea. Retorna 400 con mensaje "alert" y valores. | No crea. Retorna 400 con mensaje "alert" y valores conservados. |
-| **POST válido** | 302 -> 200 | Redirige y muestra la nueva sala reservada. | Redirige y muestra la nueva sala reservada. |
-| **URL inexistente** | 404 | Vista HTML de "Página no encontrada". | Vista HTML de "Página no encontrada". |
-| **Puerto inválido** | Falla | N/A (Estaba harcodeado). | Falla con mensaje explícito antes de iniciar. |
+| Caso | Estado HTTP | Vista / Contenido | Reservas | Evidencia breve |
+| :--- | :--- | :--- | :--- | :--- |
+| **Inicio** | 200 | Vista EJS (`inicio.ejs`) | 4 | Navegación y botones funcionales, ID visible en el pie. |
+| **Estado inicial** | 200 | JSON | 4 | Devuelve `{"servicio":"activo","reservas":4,"solicitudId":"BIB-000X"}`. |
+| **Listado de reservas** | 200 | Vista EJS (`lista.ejs`) | 4 | Muestra las 4 tarjetas iniciales correctamente. |
+| **Formulario (GET)** | 200 | Vista EJS (`nueva.ejs`) | 4 | Carga el formulario con selects y campos vacíos. |
+| **Detalle existente** | 200 | Vista EJS (`detalle.ejs`) | 4 | Muestra los datos de la reserva consultada. |
+| **Detalle inexistente** | 404 | Vista EJS (`no-encontrado.ejs`) | 4 | Muestra página HTML de error 404 sin detener el servidor. |
+| **POST vacío** | 400 | Vista EJS (`nueva.ejs`) | 4 | Renderiza formulario, muestra `role="alert"` y conserva valores. Sin alta. |
+| **POST sala no permitida**| 400 | Vista EJS (`nueva.ejs`) | 4 | Rechaza manipulación del select. Muestra alerta. Sin alta. |
+| **POST email sin @** | 400 | Vista EJS (`nueva.ejs`) | 4 | Falla validación de correo. Muestra alerta. Sin alta. |
+| **POST personas 0, 7 o float**| 400 | Vista EJS (`nueva.ejs`) | 4 | Rechaza límites y decimales. Muestra alerta. Sin alta. |
+| **POST válido** | 302 -> 200| Redirección -> Vista `lista.ejs`| 5 | Redirige a `/reservas` y la grilla muestra la nueva tarjeta. |
+| **CSS estático** | 200 | Archivo `.css` | N/A | Estilos aplicados correctamente (`/css/estilos.css`). |
+| **URL inexistente** | 404 | Vista EJS (`no-encontrado.ejs`) | N/A | Capturado por el middleware final. Muestra HTML de error. |
+| **Puerto inválido** | Falla | Consola (Terminal) | N/A | Mensaje: "PORT debe ser un entero entre 1 y 65535". No inicia. |
 
 ## Formato y análisis estático
 El proyecto incluye herramientas de calidad de código:
 - `npm run format`: Utiliza **Prettier** para unificar el formato, espacios y sangrías de manera automática en la carpeta `src/`.
 - `npm run lint`: Utiliza **ESLint** para realizar un análisis estático en busca de errores sintácticos, variables sin uso y patrones problemáticos (configurado para CommonJS).
 - `npm run check`: Ejecuta ambas herramientas de verificación en cadena.
+
+**Resultados de la ejecución de comandos:**
+- `npm install`: Ejecutado con éxito. Se instalaron las dependencias de producción y desarrollo, generando el `package-lock.json`.
+- `npm run format`: Ejecutado correctamente. Prettier analizó y ajustó el formato de los archivos en la carpeta `src/`.
+- `npm run lint`: Ejecutado con éxito. ESLint no arrojó ninguna advertencia ni error de sintaxis o variables sin uso.
+- `npm run check`: Ejecutó ambas validaciones anteriores de forma secuencial sin problemas.
+- `npm start`: El proceso arrancó con éxito mostrando el mensaje "Aplicación disponible en http://localhost:3000" y esperando conexiones.
 
 ## Persistencia temporal y límites
 Los datos ingresados no se guardan de forma permanente. El sistema utiliza un arreglo en memoria que vive dentro del scope protegido de `src/servicios/reservas.js`. Al detener el proceso de Node.js, la memoria se libera y los datos se pierden. Al reiniciar, la aplicación inyecta nuevamente la semilla quemada en `index.js`, restaurando el sistema a su estado inicial.
