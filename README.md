@@ -1,75 +1,87 @@
-# Trabajo práctico 06
+# Trabajo práctico 07 - Persistencia inicial de reservas de salas
 
-## Proyecto de partida y cambios
-Este proyecto toma como punto de partida la aplicación funcional desarrollada en el TP 05 (Reservas de Salas con Middleware). El cambio principal consiste en la refactorización de un único archivo `index.js` hacia una arquitectura modular, separando las responsabilidades de configuración, aplicación, rutas, controladores, servicios y middleware, manteniendo exactamente el mismo comportamiento funcional y contrato de rutas.
+## 1. Punto de partida y proyecto
+Este proyecto es una continuación directa (copia denominada `tp-07-salas-mongodb`) del TP 06. Conserva la arquitectura modular basada en Express, los recursos estáticos y las vistas EJS, pero introduce un laboratorio de persistencia interactuando con MongoDB Atlas.
 
-## Instalación y ejecución
+## 2. Entorno y Versiones
+- **Node.js**: >= 22.13.0
+- **Base de Datos**: MongoDB Atlas, clúster gratuito Free (M0).
+- **Mongoose**: Versión 9.10.3 instalada de manera exacta.
+
+## 3. Preparación, Instalación y Ejecución
 1. Clonar el repositorio.
-2. Ejecutar el comando `npm install` para instalar todas las dependencias.
-3. Para iniciar la aplicación con los valores por defecto, ejecutar: `npm start`.
-4. Para iniciar la aplicación utilizando variables de entorno locales, crear un archivo `.env` basándose en `.env.example` y ejecutar: `npm run start:local`.
-El servidor se iniciará por defecto en `http://localhost:3000`.
+2. Ejecutar `npm install` para descargar las dependencias.
+3. **Configuración de Atlas:** En MongoDB Atlas, crear un clúster Free (M0). Generar un usuario de base de datos con permisos de lectura y escritura, y autorizar la dirección IP local en el apartado de Network Access.
+4. **Entorno local:** Copiar el archivo `.env.example` y renombrarlo a `.env`. Sustituir los marcadores de `MONGODB_URI` (`USUARIO`, `CLAVE` y `HOST`) por los datos reales provistos por Atlas apuntando a la base `reservas_salas_u7`.
+5. Ejecutar la aplicación web en memoria: `npm start`.
 
-## Configuración del entorno
-La configuración centralizada en `src/configuracion.js` se encarga de leer `process.env`. Valida estrictamente que la variable `PORT` sea un número entero válido (entre 1 y 65535) y establece el formato de registro de Morgan (`dev` o `combined`) dependiendo si `NODE_ENV` está en producción o no. Las credenciales o variables de entorno reales no se suben al repositorio gracias a que `.env` está incluido en el archivo `.gitignore`.
+## 4. Laboratorio: Comandos y Diagnóstico DNS
+Para sortear posibles bloqueos en la resolución de los registros SRV/TXT por parte de los proveedores de internet locales, se ha configurado explícitamente a Node.js para utilizar resolutores DNS públicos (`8.8.8.8` y `1.1.1.1`) en `src/config/base-datos.js`.
 
-## Mapa de módulos y dependencias
-- **`src/index.js`**: Punto de entrada principal. Se encarga exclusivamente de inyectar los datos iniciales, crear las dependencias (servicio, aplicación) y arrancar el servidor con `app.listen()`.
-- **`src/app.js`**: Configura la aplicación de Express, estableciendo el motor de vistas, el orden estricto del pipeline de middleware y el montaje de los routers.
-- **`src/configuracion.js`**: Procesa, valida y exporta las variables del entorno.
-- **`src/servicios/reservas.js`**: Contiene la lógica de negocio. **Aquí vive el único arreglo temporal de reservas**. Este módulo no utiliza objetos HTTP como `res` ni `req` porque su única responsabilidad es operar sobre los datos (buscar, agregar, contar) de forma agnóstica, permitiendo que la lógica sea reutilizable incluso fuera de un contexto web.
-- **`src/controladores/reservas.js`**: Es el adaptador HTTP. Se encarga de recibir la solicitud (`req`), llamar al servicio correspondiente, y enviar la respuesta (`res`) ya sea renderizando una vista de EJS, enviando JSON o realizando una redirección 302.
-- **`src/rutas/reservas.js`**: Actúa como el mapa del área. Relaciona el método HTTP y el camino con su respectivo middleware y método del controlador. **Declara caminos relativos** (como `/` o `/nueva`) porque el prefijo base `/reservas` se asigna dinámicamente en `app.js` al momento de montar el router.
-- **`src/middleware/`**: Aloja las funciones intermedias extraídas (identificador, medición y validación de reservas).
+**Comandos del laboratorio (ejecutar en terminal):**
+- Comprobar conexión: `node --env-file .env scripts/comprobar-conexion.js`
+- Crear reserva de prueba: `node --env-file .env scripts/crear-reserva.js`
+- Listar reservas persistentes: `node --env-file .env scripts/listar-reservas.js`
 
-## Pipeline y contrato de rutas
-El pipeline de middleware respeta el siguiente orden de ejecución:
-`Morgan -> identificarSolicitud -> medirDuracion -> expressLayouts -> express.static -> express.urlencoded -> express.json -> router /reservas -> 404 (Final)`
+## 5. Mapa de archivos, Esquema, Modelo y Colección
+- **`src/config/entorno.js`**: Centraliza la lectura de `PORT` y `MONGODB_URI`.
+- **`src/config/base-datos.js`**: Exporta las funciones para conectar y desconectar de MongoDB mediante Mongoose.
+- **`src/modelos/reserva.js`**: Contiene la definición del esquema y el modelo.
+- **`scripts/`**: Programas de consola aislados para probar la conexión, creación y lectura en la base de datos sin levantar Express.
 
-**Contrato de rutas conservado:**
-- `GET /` -> 200, inicio
-- `GET /estado` -> 200, JSON con cantidad e ID de solicitud
-- `GET /reservas` -> 200, listado de reservas
-- `GET /reservas/nueva` -> 200, formulario de creación
-- `GET /reservas/:id` -> 200 (si existe) o 404 (HTML si no existe)
-- `POST /reservas` -> 302 (válido) o 400 (inválido)
-- `GET /css/estilos.css` -> 200
+**Conceptos clave:**
+- **Esquema (Schema):** Define el contrato de los datos a nivel de aplicación (campos, tipos y validaciones).
+- **Modelo (Model):** Es la clase constructora provista por Mongoose que envuelve el esquema y nos otorga los métodos (`create`, `find`) para interactuar con la base.
+- **Colección:** Es el contenedor físico en MongoDB (llamado explícitamente `reservas`) donde se almacenan los documentos BSON generados por el modelo.
 
-**Nota sobre Morgan:**
-Dado que Morgan (`app.use(morgan(...))`) está registrado al principio del pipeline en `app.js`, antes de `express.static` y del middleware 404 final, esta herramienta registra **absolutamente todas las solicitudes**, incluyendo las peticiones exitosas de recursos estáticos (como `/css/estilos.css`) y las solicitudes a rutas inexistentes que terminan en 404.
+## 6. Campos y Reglas del Dominio
+- `estudiante`: Texto, obligatorio, con limpieza de espacios (`trim`).
+- `email`: Texto, obligatorio, limpieza de espacios y validado mínimamente para contener un arroba (`match: /@/`).
+- `sala`: Texto, obligatorio. Restringido a enumerador (`enum`): "Sala Norte", "Sala Sur", "Sala Multimedia".
+- `fecha`: Texto, obligatorio, con limpieza de espacios.
+- `turno`: Texto, obligatorio. Restringido a enumerador (`enum`): "Mañana", "Tarde", "Noche".
+- `personas`: Numérico, obligatorio. Limitado a valores entre 1 (`min`) y 6 (`max`). Implementa una validación personalizada (`validate`) usando `Number.isInteger` para rechazar números fraccionarios.
+*(Límites actuales: Aún no se controlan lógicas complejas de negocio como superposición de horarios, fechas pasadas o disponibilidad de cupos).*
 
-## Matriz antes/después
-El comportamiento funcional se mantiene idéntico tras la refactorización:
+## 7. Matriz de Pruebas y Evidencia de Persistencia
 
-| Caso | Estado HTTP | Vista / Contenido | Reservas | Evidencia breve |
+**Nota sobre Morgan:** Como `app.use(morgan(...))` está registrado al principio del pipeline en `app.js`, intercepta y registra en la terminal absolutamente todas las solicitudes, incluyendo los recursos estáticos cargados exitosamente por `express.static` (`/css/estilos.css`) y las peticiones a URLs inexistentes que terminan en el middleware 404 final.
+
+| Caso | Estado HTTP | Vista / Contenido | Reservas (Memoria) | Evidencia / Observaciones |
 | :--- | :--- | :--- | :--- | :--- |
-| **Inicio** | 200 | Vista EJS (`inicio.ejs`) | 4 | Navegación y botones funcionales, ID visible en el pie. |
-| **Estado inicial** | 200 | JSON | 4 | Devuelve `{"servicio":"activo","reservas":4,"solicitudId":"BIB-000X"}`. |
-| **Listado de reservas** | 200 | Vista EJS (`lista.ejs`) | 4 | Muestra las 4 tarjetas iniciales correctamente. |
-| **Formulario (GET)** | 200 | Vista EJS (`nueva.ejs`) | 4 | Carga el formulario con selects y campos vacíos. |
-| **Detalle existente** | 200 | Vista EJS (`detalle.ejs`) | 4 | Muestra los datos de la reserva consultada. |
-| **Detalle inexistente** | 404 | Vista EJS (`no-encontrado.ejs`) | 4 | Muestra página HTML de error 404 sin detener el servidor. |
-| **POST vacío** | 400 | Vista EJS (`nueva.ejs`) | 4 | Renderiza formulario, muestra `role="alert"` y conserva valores. Sin alta. |
-| **POST sala no permitida**| 400 | Vista EJS (`nueva.ejs`) | 4 | Rechaza manipulación del select. Muestra alerta. Sin alta. |
-| **POST email sin @** | 400 | Vista EJS (`nueva.ejs`) | 4 | Falla validación de correo. Muestra alerta. Sin alta. |
-| **POST personas 0, 7 o float**| 400 | Vista EJS (`nueva.ejs`) | 4 | Rechaza límites y decimales. Muestra alerta. Sin alta. |
-| **POST válido** | 302 -> 200| Redirección -> Vista `lista.ejs`| 5 | Redirige a `/reservas` y la grilla muestra la nueva tarjeta. |
-| **CSS estático** | 200 | Archivo `.css` | N/A | Estilos aplicados correctamente (`/css/estilos.css`). |
-| **URL inexistente** | 404 | Vista EJS (`no-encontrado.ejs`) | N/A | Capturado por el middleware final. Muestra HTML de error. |
-| **Puerto inválido** | Falla | Consola (Terminal) | N/A | Mensaje: "PORT debe ser un entero entre 1 y 65535". No inicia. |
+| **Inicio** | 200 | Vista `inicio.ejs` | 4 | Navegación funcional, ID de solicitud (`BIB-XXXX`) visible en el pie de página. |
+| **Estado inicial** | 200 | JSON | 4 | Devuelve estructura JSON validando `servicio: activo` y cantidad de reservas en memoria. |
+| **Listado de reservas** | 200 | Vista `lista.ejs` | 4 | Renderiza la grilla con las tarjetas generadas desde la semilla inicial. |
+| **Formulario (GET)** | 200 | Vista `nueva.ejs` | 4 | Carga el formulario vacío con los selects instanciados. |
+| **Detalle existente** | 200 | Vista `detalle.ejs` | 4 | Muestra los atributos completos de una reserva solicitada. |
+| **Detalle inexistente** | 404 | Vista `no-encontrado.ejs`| 4 | Presenta vista HTML de error. El servidor continúa en ejecución. |
+| **POST inválido: Vacío** | 400 | Vista `nueva.ejs` | 4 | Renderiza alerta (`role="alert"`), conserva valores. No ejecuta alta. |
+| **POST inválido: Sala errónea**| 400 | Vista `nueva.ejs` | 4 | Validador rechaza manipulación HTML del select. Retorna alerta. No ejecuta alta. |
+| **POST inválido: Email sin @**| 400 | Vista `nueva.ejs` | 4 | Falla validación de regex. Retorna alerta. No ejecuta alta. |
+| **POST inválido: Personas 0** | 400 | Vista `nueva.ejs` | 4 | Falla validación `min`. Retorna alerta. No ejecuta alta. |
+| **POST inválido: Personas 7** | 400 | Vista `nueva.ejs` | 4 | Falla validación `max`. Retorna alerta. No ejecuta alta. |
+| **POST inválido: Personas Float**| 400 | Vista `nueva.ejs` | 4 | Falla validación `isInteger` (ej: 2.5). Retorna alerta. No ejecuta alta. |
+| **POST válido** | 302 -> 200| Vista `lista.ejs` | 5 | Redirige al catálogo (`/reservas`). Se observa la nueva tarjeta agregada. |
+| **CSS estático** | 200 | Archivo `.css` | N/A | Hoja de estilos vinculada y aplicada correctamente en el layout global. |
+| **URL inexistente** | 404 | Vista `no-encontrado.ejs`| N/A | El middleware de cierre captura la URL y entrega la vista de error. |
 
-## Formato y análisis estático
-El proyecto incluye herramientas de calidad de código:
-- `npm run format`: Utiliza **Prettier** para unificar el formato, espacios y sangrías de manera automática en la carpeta `src/`.
-- `npm run lint`: Utiliza **ESLint** para realizar un análisis estático en busca de errores sintácticos, variables sin uso y patrones problemáticos (configurado para CommonJS).
-- `npm run check`: Ejecuta ambas herramientas de verificación en cadena.
+**Pruebas del laboratorio MongoDB (Terminal):**
+- **Conexión válida:** El script `comprobar-conexion.js` imprimió "Conexión con MongoDB establecida." y finalizó con código 0.
+- **Variable vacía:** Forzando `MONGODB_URI` vacío en `.env`, el script detuvo la ejecución advirtiendo configuración faltante.
+- **Fallo de autenticación:** Al manipular la clave temporalmente, arrojó `MongoServerError: bad auth` rechazando la operación sin colgar el hilo.
+- **Evidencia de persistencia (Procesos separados):**
+  1. Se ejecutó `listar-reservas.js` (Devolvió: 0 reservas persistentes).
+  2. Se ejecutó `crear-reserva.js` en un proceso nuevo (Devolvió: "Reserva guardada. _id: 6734abc...").
+  3. Se ejecutó `listar-reservas.js` en un tercer proceso nuevo (Devolvió tabla con el registro exacto, el mismo `_id`, y "Total de reservas persistentes: 1"). 
+  *Nota: La ejecución reiterada del script de creación genera múltiples documentos iguales pero con `_id` distintos, comportamiento documentado y esperado al no haber forzado unicidad.*
 
-**Resultados de la ejecución de comandos:**
-- `npm install`: Ejecutado con éxito. Se instalaron las dependencias de producción y desarrollo, generando el `package-lock.json`.
-- `npm run format`: Ejecutado correctamente. Prettier analizó y ajustó el formato de los archivos en la carpeta `src/`.
-- `npm run lint`: Ejecutado con éxito. ESLint no arrojó ninguna advertencia ni error de sintaxis o variables sin uso.
-- `npm run check`: Ejecutó ambas validaciones anteriores de forma secuencial sin problemas.
-- `npm start`: El proceso arrancó con éxito mostrando el mensaje "Aplicación disponible en http://localhost:3000" y esperando conexiones.
+## 8. Persistencia Dual: ¿Por qué el sitio continúa en memoria?
+Actualmente, existe una separación transitoria documentada: la aplicación web (Express) sigue consumiendo la lógica y los arreglos en memoria de `src/servicios/reservas.js`, por lo que las reservas web desaparecen al reiniciar Node.js. Por otro lado, los scripts del laboratorio (`scripts/`) operan con Mongoose y Atlas, logrando persistencia real.
+La integración total se abordará en la **Unidad 8**, donde los controladores HTTP y el servicio se refactorizarán para consumir operaciones asíncronas basadas en promesas, conectando las vistas EJS definitivamente con la base de datos de MongoDB.
 
-## Persistencia temporal y límites
-Los datos ingresados no se guardan de forma permanente. El sistema utiliza un arreglo en memoria que vive dentro del scope protegido de `src/servicios/reservas.js`. Al detener el proceso de Node.js, la memoria se libera y los datos se pierden. Al reiniciar, la aplicación inyecta nuevamente la semilla quemada en `index.js`, restaurando el sistema a su estado inicial.
+## 9. Seguridad y Análisis Estático
+- **Seguridad:** Se confirma que el archivo `.env` se encuentra excluido mediante `.gitignore`. No existen credenciales, URIs privadas ni contraseñas expuestas en ningún commit de este repositorio.
+- **Ejecución de herramientas de calidad:**
+  - `npm run format`: Ejecutado. Prettier formateó exitosamente las carpetas `src/` y `scripts/`.
+  - `npm run lint`: Ejecutado. ESLint validó la sintaxis y variables según las normas impuestas para CommonJS sin reportar incidencias.
+  - `npm run check`: Ejecutó ambas comprobaciones en pipeline con salida satisfactoria.
